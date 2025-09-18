@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tower Detection AI - YOLOv11</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <div class="logo">
+          <i class="fas fa-tower-broadcast"></i>
+          <h1>Tower Detection AI</h1>
+        </div>
+        <p class="subtitle">Powered by YOLOv11 - Advanced Tower Recognition</p>
+      </header>
+
+      <main class="main-content">
+        <div class="upload-section">
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-content">
+              <i class="fas fa-cloud-upload-alt upload-icon"></i>
+              <h3>Upload Tower Images</h3>
+              <p>
+                Drag and drop your images here or click to browse (multiple
+                images supported)
+              </p>
+              <input
+                type="file"
+                id="imageInput"
+                accept="image/*"
+                multiple
+                hidden
+              />
+              <button
+                class="upload-btn"
+                id="uploadBtn"
+              >
+                Choose Images
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="results-section" id="resultsSection" style="display: none">
+          <div class="results-header">
+            <h3>Detection Results</h3>
+            <div class="batch-info">
+              <span id="batchCount">0 images processed</span>
+              <span id="batchTime">Total time: 0ms</span>
+            </div>
+          </div>
+
+          <div class="images-gallery" id="imagesGallery">
+            <!-- Individual image results will be dynamically added here -->
+          </div>
+        </div>
+
+        <div class="loading-section" id="loadingSection" style="display: none">
+          <div class="loading-spinner">
+            <i class="fas fa-cog fa-spin"></i>
+            <p id="loadingText">Analyzing images with AI...</p>
+          </div>
+        </div>
+
+        <div class="error-section" id="errorSection" style="display: none">
+          <div class="error-content">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Detection Failed</h3>
+            <p id="errorMessage">Something went wrong. Please try again.</p>
+            <button class="retry-btn" onclick="resetUpload()">Try Again</button>
+          </div>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <p>
+          &copy; 2024 Tower Detection AI. Built with YOLOv11 and modern web
+          technologies.
+        </p>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
