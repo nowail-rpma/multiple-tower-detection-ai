@@ -78,19 +78,31 @@ def run_inference(image):
     """Run YOLO inference on the image"""
     try:
         if model is None:
-            # Return mock detection for demo purposes
+            # Return mock detection for demo purposes with all available classes
             return [
                 {
                     'bbox': [100, 100, 200, 300],
-                    'confidence': 0.01,
+                    'confidence': 0.85,
                     'class_id': 0,
-                    'class_name': 'tower'
+                    'class_name': 'Mobile Tower'
                 },
                 {
                     'bbox': [80, 280, 240, 350],
-                    'confidence': 0.01,
-                    'class_id': 1,
-                    'class_name': 'tower base'
+                    'confidence': 0.75,
+                    'class_id': 2,
+                    'class_name': 'Tower Base'
+                },
+                {
+                    'bbox': [300, 150, 50, 80],
+                    'confidence': 0.65,
+                    'class_id': 10,
+                    'class_name': 'GSM ANTENNA'
+                },
+                {
+                    'bbox': [400, 200, 60, 90],
+                    'confidence': 0.70,
+                    'class_id': 9,
+                    'class_name': 'solar panel'
                 }
             ]
         
@@ -112,7 +124,14 @@ def run_inference(image):
                     # Get confidence and class
                     confidence = box.conf[0].cpu().numpy()
                     class_id = int(box.cls[0].cpu().numpy())
-                    class_name = model.names[class_id] if hasattr(model, 'names') else 'object'
+                    
+                    # Validate class_id and get class name
+                    if hasattr(model, 'names') and class_id in model.names:
+                        class_name = model.names[class_id]
+                    elif hasattr(model, 'names'):
+                        class_name = f'unknown_class_{class_id}'
+                    else:
+                        class_name = 'object'
                     
                     detections.append({
                         'bbox': [float(x), float(y), float(w), float(h)],
@@ -339,6 +358,32 @@ def health_check():
         'model_loaded': model is not None,
         'timestamp': time.time()
     })
+
+@app.route('/api/classes', methods=['GET'])
+def get_classes():
+    """Get all available detection classes"""
+    if model is not None and hasattr(model, 'names'):
+        return jsonify({
+            'success': True,
+            'classes': model.names,
+            'total_classes': len(model.names)
+        })
+    else:
+        # Return mock classes for demo
+        mock_classes = {
+            0: 'Mobile Tower', 1: 'Small Tower', 2: 'Tower Base', 3: 'discoloration',
+            4: 'surface-damage', 5: 'tower', 6: 'BTS', 7: 'Control Box', 8: 'Generator',
+            9: 'solar panel', 10: 'GSM ANTENNA', 11: 'MICROWAVE ANTENNA', 12: 'Nest',
+            13: 'Corrosion', 14: 'Microwave antenna', 15: 'Panel antenna', 16: ' Dirty antenna',
+            17: 'Dirty equipment', 18: ' Rusty mounts and bolts', 19: ' Rusty bolts',
+            20: 'Rusty rod and bolts'
+        }
+        return jsonify({
+            'success': True,
+            'classes': mock_classes,
+            'total_classes': len(mock_classes),
+            'note': 'Using mock classes - model not loaded'
+        })
 
 @app.errorhandler(413)
 def too_large(e):

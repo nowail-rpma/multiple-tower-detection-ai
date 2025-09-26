@@ -10,6 +10,7 @@ A modern web application for tower detection using YOLOv11 model. Upload images 
 - 📱 **Responsive Design**: Works on desktop and mobile devices
 - ⚡ **Real-time Processing**: Fast inference with loading indicators
 - 🎨 **Modern UI**: Beautiful gradient design with smooth animations
+- 🏗️ **21 Detection Classes**: Comprehensive tower and equipment detection
 
 ## Setup Instructions
 
@@ -65,13 +66,19 @@ Upload an image for tower detection.
       "bbox": [x, y, width, height],
       "confidence": 0.85,
       "class_id": 0,
-      "class_name": "tower"
+      "class_name": "Mobile Tower"
+    },
+    {
+      "bbox": [x, y, width, height],
+      "confidence": 0.75,
+      "class_id": 10,
+      "class_name": "GSM ANTENNA"
     }
   ],
   "confidence": 0.85,
-  "class_name": "tower",
+  "class_name": "Mobile Tower",
   "bbox": [100, 50, 200, 300],
-  "total_detections": 1
+  "total_detections": 2
 }
 ```
 
@@ -79,12 +86,47 @@ Upload an image for tower detection.
 
 Check server health and model status.
 
+## Detection Classes
+
+The model can detect **21 different classes** of towers, equipment, and damage indicators:
+
+### Tower Types
+
+- **Mobile Tower** (0) - Mobile communication towers
+- **Small Tower** (1) - Smaller tower structures
+- **Tower Base** (2) - Foundation/base of towers
+- **tower** (5) - General tower structures
+- **BTS** (6) - Base Transceiver Station
+
+### Equipment & Components
+
+- **Control Box** (7) - Equipment control units
+- **Generator** (8) - Power generation equipment
+- **solar panel** (9) - Solar power panels
+- **GSM ANTENNA** (10) - GSM communication antennas
+- **MICROWAVE ANTENNA** (11) - Microwave communication antennas
+- **Microwave antenna** (14) - Alternative microwave antenna naming
+- **Panel antenna** (15) - Panel-type antennas
+- ** Dirty antenna** (16) - Antennas with dirt accumulation
+
+### Damage & Maintenance Issues
+
+- **discoloration** (3) - Surface discoloration
+- **surface-damage** (4) - Visible surface damage
+- **Nest** (12) - Bird or animal nests
+- **Corrosion** (13) - Corrosion damage
+- **Dirty equipment** (17) - Equipment with dirt accumulation
+- ** Rusty mounts and bolts** (18) - Rusty mounting hardware
+- ** Rusty bolts** (19) - Individual rusty bolts
+- **Rusty rod and bolts** (20) - Rusty structural elements
+
 ## Usage
 
 1. Open your browser and go to `http://localhost:5000`
 2. Upload a tower image by dragging & dropping or clicking "Choose Image"
 3. Wait for the AI to process the image
 4. View the detection results with bounding box overlay and confidence score
+5. See detailed class information for each detected object
 
 ## Customization
 

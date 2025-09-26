@@ -30,7 +30,7 @@ function initializeEventListeners() {
   uploadArea.addEventListener("drop", handleDrop);
   uploadArea.addEventListener("click", (e) => {
     // Only trigger if clicking on the upload area itself, not on the button
-    if (e.target === uploadArea || e.target.closest('.upload-content')) {
+    if (e.target === uploadArea || e.target.closest(".upload-content")) {
       console.log("Upload area clicked");
       if (imageInput) imageInput.click();
     }
@@ -184,7 +184,6 @@ function createImageCard(file, index) {
       </div>
     </div>
     <div class="image-info">
-      <div class="image-filename">${file.name}</div>
       <div class="confidence-meter">
         <label>Confidence Score:</label>
         <div class="meter">
@@ -297,7 +296,13 @@ function updateImageCard(cardId, results, processingTime) {
     const canvas = card.querySelector(".detection-canvas");
     const img = card.querySelector(".result-image");
     if (canvas && img) {
-      drawBoundingBoxOnCanvas(canvas, img, results.bbox, confidence);
+      drawBoundingBoxOnCanvas(
+        canvas,
+        img,
+        results.bbox,
+        confidence,
+        results.class_name
+      );
     }
   }
 
@@ -351,7 +356,13 @@ function updateBatchInfo(count, totalTime) {
 }
 
 // Draw bounding box on canvas for individual image cards
-function drawBoundingBoxOnCanvas(canvas, img, bbox, confidence) {
+function drawBoundingBoxOnCanvas(
+  canvas,
+  img,
+  bbox,
+  confidence,
+  class_name = "Object"
+) {
   const ctx = canvas.getContext("2d");
 
   // Set canvas size to match image
@@ -375,7 +386,7 @@ function drawBoundingBoxOnCanvas(canvas, img, bbox, confidence) {
   ctx.strokeRect(scaledX, scaledY, scaledW, scaledH);
 
   // Draw label background
-  const labelText = `Tower ${Math.round(confidence * 100)}%`;
+  const labelText = `${class_name} ${Math.round(confidence * 100)}%`;
   const textMetrics = ctx.measureText(labelText);
   const labelWidth = textMetrics.width + 16;
   const labelHeight = 20;
