@@ -30,7 +30,7 @@ echo "🐳 Building Docker image..."
 docker-compose build
 
 echo "🚀 Starting the application..."
-echo "   The application will be available at: http://localhost:5000"
+echo "   The application will be available at: http://localhost:5005"
 echo "   Press Ctrl+C to stop the application"
 echo ""
 
