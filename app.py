@@ -28,7 +28,7 @@ MODEL_PATH = 'best.pt'  # Replace with your trained model path
 model = None
 
 def load_model():
-    """Load the YOLOv11 model"""
+    """Load the YOLOv11 model from best.pt"""
     global model
     try:
         print(f"Attempting to load model from: {MODEL_PATH}")
@@ -39,19 +39,32 @@ def load_model():
             model = YOLO(MODEL_PATH)
             print(f"Model loaded successfully from {MODEL_PATH}")
             print(f"Model type: {type(model)}")
+            
+            # Get model information
             if hasattr(model, 'names'):
-                print(f"Model classes: {model.names}")
+                print(f"Model classes ({len(model.names)}): {model.names}")
+                print("Available classes:")
+                for class_id, class_name in model.names.items():
+                    print(f"  {class_id}: {class_name}")
+            else:
+                print("Warning: Model names not available")
+                
+            # Test model with a dummy image to ensure it's working
+            import numpy as np
+            dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
+            test_results = model(dummy_image, verbose=False)
+            print("Model test successful - ready for inference")
+            
         else:
-            print(f"Custom model not found at {MODEL_PATH}")
-            print("Downloading pretrained YOLOv11 model for demo...")
-            # Download pretrained model
-            model = YOLO('yolov11n.pt')
-            print("Using pretrained YOLOv11 model (replace with your trained model)")
+            print(f"ERROR: Model file not found at {MODEL_PATH}")
+            print("Please ensure best.pt is in the project root directory")
+            model = None
+            
     except Exception as e:
         print(f"Error loading model: {e}")
         import traceback
         traceback.print_exc()
-        print("Please add your trained model file as 'best.pt' in the project root")
+        print("Please check that best.pt is a valid YOLO model file")
         model = None
 
 def allowed_file(filename):
@@ -75,39 +88,16 @@ def preprocess_image(image_path):
         raise ValueError(f"Error preprocessing image: {e}")
 
 def run_inference(image):
-    """Run YOLO inference on the image"""
+    """Run YOLO inference with fixed optimal parameters for tower detection"""
     try:
         if model is None:
-            # Return mock detection for demo purposes with all available classes
-            return [
-                {
-                    'bbox': [100, 100, 200, 300],
-                    'confidence': 0.85,
-                    'class_id': 0,
-                    'class_name': 'Mobile Tower'
-                },
-                {
-                    'bbox': [80, 280, 240, 350],
-                    'confidence': 0.75,
-                    'class_id': 2,
-                    'class_name': 'Tower Base'
-                },
-                {
-                    'bbox': [300, 150, 50, 80],
-                    'confidence': 0.65,
-                    'class_id': 10,
-                    'class_name': 'GSM ANTENNA'
-                },
-                {
-                    'bbox': [400, 200, 60, 90],
-                    'confidence': 0.70,
-                    'class_id': 9,
-                    'class_name': 'solar panel'
-                }
-            ]
+            raise ValueError("Model not loaded. Please ensure best.pt is available.")
         
-        # Run inference
-        results = model(image)
+        # Run inference with fixed optimal YOLO parameters
+        results = model(image, 
+                       conf=0.20,    # Fixed confidence threshold: 0.20
+                       iou=0.50,     # Fixed IoU threshold: 0.50
+                       max_det=300)  # Fixed max detections: 300
         
         # Process results
         detections = []
@@ -125,6 +115,12 @@ def run_inference(image):
                     confidence = box.conf[0].cpu().numpy()
                     class_id = int(box.cls[0].cpu().numpy())
                     
+                    # Additional confidence filtering for antenna classes (dynamic based on model)
+                    if hasattr(model, 'names') and model.names:
+                        class_name_lower = model.names[class_id].lower()
+                        if 'antenna' in class_name_lower and confidence < 0.18:
+                            continue
+                    
                     # Validate class_id and get class name
                     if hasattr(model, 'names') and class_id in model.names:
                         class_name = model.names[class_id]
@@ -140,9 +136,44 @@ def run_inference(image):
                         'class_name': class_name
                     })
         
+        # Post-process detections to filter false positives
+        detections = filter_false_positives(detections)
+        
         return detections
     except Exception as e:
         raise ValueError(f"Error during inference: {e}")
+
+def filter_false_positives(detections):
+    """Filter out likely false positive detections with optimized thresholds"""
+    if not detections:
+        return detections
+    
+    filtered_detections = []
+    
+    for detection in detections:
+        class_name = detection['class_name']
+        confidence = detection['confidence']
+        bbox = detection['bbox']
+        
+        # Filter out very small detections (likely false positives)
+        if bbox[2] < 15 or bbox[3] < 15:  # Width or height less than 15 pixels
+            continue
+            
+        # Filter out very low confidence antenna detections (adjusted for new range)
+        if 'antenna' in class_name.lower() and confidence < 0.18:
+            continue
+            
+        # Filter out detections that are too close to image edges (often false positives)
+        if bbox[0] < 5 or bbox[1] < 5:  # Too close to top/left edge
+            continue
+            
+        # Additional filtering for very low confidence detections
+        if confidence < 0.16:  # Absolute minimum confidence
+            continue
+            
+        filtered_detections.append(detection)
+    
+    return filtered_detections
 
 @app.route('/')
 def index():
@@ -191,21 +222,17 @@ def detect_tower():
             # Preprocess image
             image = preprocess_image(file_path)
             
-            # Run inference
+            # Run inference with fixed optimal parameters
             detections = run_inference(image)
             
             # Process results - always return success to display image
             if detections:
-                # Get the detection with highest confidence
-                best_detection = max(detections, key=lambda x: x['confidence'])
-                
+                # Return ALL detections, not just the best one
                 response = {
                     'success': True,
                     'detections': detections,
-                    'confidence': best_detection['confidence'],
-                    'class_name': best_detection['class_name'],
-                    'bbox': best_detection['bbox'],
-                    'total_detections': len(detections)
+                    'total_detections': len(detections),
+                    'message': f'Found {len(detections)} object(s) in the image'
                 }
             else:
                 # No detections found, but still return success to display image
@@ -290,18 +317,14 @@ def detect_towers_multiple():
                 
                 # Process results
                 if detections:
-                    # Get the detection with highest confidence
-                    best_detection = max(detections, key=lambda x: x['confidence'])
-                    
+                    # Return ALL detections for multiple image processing
                     result = {
                         'index': i,
                         'success': True,
                         'filename': file.filename,
                         'detections': detections,
-                        'confidence': best_detection['confidence'],
-                        'class_name': best_detection['class_name'],
-                        'bbox': best_detection['bbox'],
-                        'total_detections': len(detections)
+                        'total_detections': len(detections),
+                        'message': f'Found {len(detections)} object(s) in {file.filename}'
                     }
                 else:
                     result = {
@@ -361,28 +384,53 @@ def health_check():
 
 @app.route('/api/classes', methods=['GET'])
 def get_classes():
-    """Get all available detection classes"""
+    """Get all available detection classes from the loaded model"""
     if model is not None and hasattr(model, 'names'):
         return jsonify({
             'success': True,
             'classes': model.names,
-            'total_classes': len(model.names)
+            'total_classes': len(model.names),
+            'model_loaded': True
         })
     else:
-        # Return mock classes for demo
-        mock_classes = {
-            0: 'Mobile Tower', 1: 'Small Tower', 2: 'Tower Base', 3: 'discoloration',
-            4: 'surface-damage', 5: 'tower', 6: 'BTS', 7: 'Control Box', 8: 'Generator',
-            9: 'solar panel', 10: 'GSM ANTENNA', 11: 'MICROWAVE ANTENNA', 12: 'Nest',
-            13: 'Corrosion', 14: 'Microwave antenna', 15: 'Panel antenna', 16: ' Dirty antenna',
-            17: 'Dirty equipment', 18: ' Rusty mounts and bolts', 19: ' Rusty bolts',
-            20: 'Rusty rod and bolts'
-        }
         return jsonify({
+            'success': False,
+            'error': 'Model not loaded. Please ensure best.pt is available.',
+            'model_loaded': False
+        })
+
+@app.route('/api/model-info', methods=['GET'])
+def get_model_info():
+    """Get detailed model information"""
+    if model is not None:
+        model_info = {
             'success': True,
-            'classes': mock_classes,
-            'total_classes': len(mock_classes),
-            'note': 'Using mock classes - model not loaded'
+            'model_loaded': True,
+            'model_path': MODEL_PATH,
+            'model_type': str(type(model)),
+            'total_classes': len(model.names) if hasattr(model, 'names') else 0,
+            'classes': model.names if hasattr(model, 'names') else {},
+            'timestamp': time.time()
+        }
+        
+        # Add class categories if available
+        if hasattr(model, 'names') and model.names:
+            antenna_classes = [name for name in model.names.values() if 'antenna' in name.lower()]
+            tower_classes = [name for name in model.names.values() if 'tower' in name.lower()]
+            damage_classes = [name for name in model.names.values() if any(word in name.lower() for word in ['damage', 'rust', 'corrosion', 'dirty'])]
+            
+            model_info['class_categories'] = {
+                'antenna_classes': antenna_classes,
+                'tower_classes': tower_classes,
+                'damage_classes': damage_classes
+            }
+        
+        return jsonify(model_info)
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Model not loaded',
+            'model_loaded': False
         })
 
 @app.errorhandler(413)
@@ -395,4 +443,4 @@ if __name__ == '__main__':
     load_model()
     print("Starting Flask server...")
     # Use 0.0.0.0 for Docker compatibility
-    app.run(debug=False, host='0.0.0.0', port=5001)
+    app.run(debug=False, host='0.0.0.0', port=5002)

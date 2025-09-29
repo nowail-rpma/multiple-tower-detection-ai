@@ -4,7 +4,7 @@ services:
   tower-detection:
     build: .
     ports:
-      - "5000:5000"
+      - "5005:5000"
     volumes:
       - ./uploads:/app/uploads
       - ./best.pt:/app/best.pt  # Mount your trained model

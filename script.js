@@ -267,43 +267,68 @@ function updateImageCard(cardId, results, processingTime) {
     processingStatus.remove();
   }
 
-  // Update confidence meter
-  const confidence = results.confidence || 0;
-  const meterFill = card.querySelector(".meter-fill");
-  const meterText = card.querySelector(".meter-text");
+  // Handle multiple detections
+  const detections = results.detections || [];
+  const totalDetections = results.total_detections || 0;
 
-  if (meterFill) meterFill.style.width = `${confidence * 100}%`;
-  if (meterText) meterText.textContent = `${Math.round(confidence * 100)}%`;
+  if (detections.length > 0) {
+    // Get the highest confidence detection for the main display
+    const bestDetection = detections.reduce((best, current) =>
+      current.confidence > best.confidence ? current : best
+    );
 
-  // Update detection details
-  const objectType = card.querySelector(".detail-item strong");
-  const bboxCoords = card.querySelector(".detail-item span span");
-  const processingTimeEl = card.querySelectorAll(".detail-item span span")[2];
+    // Update confidence meter with best detection
+    const confidence = bestDetection.confidence || 0;
+    const meterFill = card.querySelector(".meter-fill");
+    const meterText = card.querySelector(".meter-text");
 
-  if (objectType)
-    objectType.textContent = results.class_name || "No tower detected";
-  if (bboxCoords) {
-    bboxCoords.textContent = results.bbox
-      ? `x:${Math.round(results.bbox[0])}, y:${Math.round(
-          results.bbox[1]
-        )}, w:${Math.round(results.bbox[2])}, h:${Math.round(results.bbox[3])}`
-      : "Not available";
-  }
-  if (processingTimeEl) processingTimeEl.textContent = `${processingTime}ms`;
+    if (meterFill) meterFill.style.width = `${confidence * 100}%`;
+    if (meterText) meterText.textContent = `${Math.round(confidence * 100)}%`;
 
-  // Draw bounding box if detection exists
-  if (results.bbox && confidence > 0) {
+    // Update detection details
+    const objectType = card.querySelector(".detail-item strong");
+    const bboxCoords = card.querySelector(".detail-item span span");
+    const processingTimeEl = card.querySelectorAll(".detail-item span span")[2];
+
+    if (objectType) {
+      if (totalDetections > 1) {
+        objectType.textContent = `${bestDetection.class_name} (+${
+          totalDetections - 1
+        } more)`;
+      } else {
+        objectType.textContent = bestDetection.class_name;
+      }
+    }
+
+    if (bboxCoords) {
+      bboxCoords.textContent = bestDetection.bbox
+        ? `x:${Math.round(bestDetection.bbox[0])}, y:${Math.round(
+            bestDetection.bbox[1]
+          )}, w:${Math.round(bestDetection.bbox[2])}, h:${Math.round(
+            bestDetection.bbox[3]
+          )}`
+        : "Not available";
+    }
+    if (processingTimeEl) processingTimeEl.textContent = `${processingTime}ms`;
+
+    // Draw ALL bounding boxes
     const canvas = card.querySelector(".detection-canvas");
     const img = card.querySelector(".result-image");
     if (canvas && img) {
-      drawBoundingBoxOnCanvas(
-        canvas,
-        img,
-        results.bbox,
-        confidence,
-        results.class_name
-      );
+      drawMultipleBoundingBoxesOnCanvas(canvas, img, detections);
     }
+
+    // Add detection summary
+    addDetectionSummary(card, detections);
+  } else {
+    // No detections found
+    const objectType = card.querySelector(".detail-item strong");
+    const bboxCoords = card.querySelector(".detail-item span span");
+    const processingTimeEl = card.querySelectorAll(".detail-item span span")[2];
+
+    if (objectType) objectType.textContent = "No objects detected";
+    if (bboxCoords) bboxCoords.textContent = "Not available";
+    if (processingTimeEl) processingTimeEl.textContent = `${processingTime}ms`;
   }
 
   // Add animation
@@ -355,49 +380,106 @@ function updateBatchInfo(count, totalTime) {
   }
 }
 
-// Draw bounding box on canvas for individual image cards
-function drawBoundingBoxOnCanvas(
-  canvas,
-  img,
-  bbox,
-  confidence,
-  class_name = "Object"
-) {
+// Draw multiple bounding boxes on canvas for individual image cards
+function drawMultipleBoundingBoxesOnCanvas(canvas, img, detections) {
   const ctx = canvas.getContext("2d");
 
   // Set canvas size to match image
   canvas.width = img.offsetWidth;
   canvas.height = img.offsetHeight;
 
-  // Calculate bounding box coordinates
-  const [x, y, w, h] = bbox;
-  const scaleX = canvas.width / img.naturalWidth;
-  const scaleY = canvas.height / img.naturalHeight;
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const scaledX = x * scaleX;
-  const scaledY = y * scaleY;
-  const scaledW = w * scaleX;
-  const scaledH = h * scaleY;
+  // Define colors for different objects
+  const colors = [
+    "#4CAF50",
+    "#2196F3",
+    "#FF9800",
+    "#9C27B0",
+    "#F44336",
+    "#00BCD4",
+    "#8BC34A",
+    "#FFC107",
+    "#E91E63",
+    "#607D8B",
+  ];
 
-  // Draw bounding box
-  ctx.strokeStyle =
-    confidence > 0.5 ? "#4CAF50" : confidence > 0.3 ? "#FF9800" : "#F44336";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(scaledX, scaledY, scaledW, scaledH);
+  detections.forEach((detection, index) => {
+    const { bbox, confidence, class_name } = detection;
+    const [x, y, w, h] = bbox;
 
-  // Draw label background
-  const labelText = `${class_name} ${Math.round(confidence * 100)}%`;
-  const textMetrics = ctx.measureText(labelText);
-  const labelWidth = textMetrics.width + 16;
-  const labelHeight = 20;
+    const scaleX = canvas.width / img.naturalWidth;
+    const scaleY = canvas.height / img.naturalHeight;
 
-  ctx.fillStyle = ctx.strokeStyle;
-  ctx.fillRect(scaledX, scaledY - labelHeight, labelWidth, labelHeight);
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
+    const scaledW = w * scaleX;
+    const scaledH = h * scaleY;
 
-  // Draw label text
-  ctx.fillStyle = "white";
-  ctx.font = "12px Arial";
-  ctx.fillText(labelText, scaledX + 8, scaledY - 6);
+    // Choose color - use cycling colors for multiple objects
+    const strokeColor = colors[index % colors.length];
+
+    // Draw bounding box
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(scaledX, scaledY, scaledW, scaledH);
+
+    // Draw label background
+    const labelText = `${class_name} ${Math.round(confidence * 100)}%`;
+    const textMetrics = ctx.measureText(labelText);
+    const labelWidth = textMetrics.width + 16;
+    const labelHeight = 20;
+
+    ctx.fillStyle = strokeColor;
+    ctx.fillRect(scaledX, scaledY - labelHeight, labelWidth, labelHeight);
+
+    // Draw label text
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.fillText(labelText, scaledX + 8, scaledY - 6);
+  });
+}
+
+// Add detection summary to the image card
+function addDetectionSummary(card, detections) {
+  // Remove existing summary if any
+  const existingSummary = card.querySelector(".detection-summary");
+  if (existingSummary) {
+    existingSummary.remove();
+  }
+
+  if (detections.length <= 1) return;
+
+  // Create summary element
+  const summary = document.createElement("div");
+  summary.className = "detection-summary";
+
+  // Group detections by class
+  const classCounts = {};
+  detections.forEach((detection) => {
+    const className = detection.class_name;
+    classCounts[className] = (classCounts[className] || 0) + 1;
+  });
+
+  // Create summary HTML
+  const summaryItems = Object.entries(classCounts)
+    .map(([className, count]) => `${className}: ${count}`)
+    .join(", ");
+
+  summary.innerHTML = `
+    <div class="summary-header">
+      <i class="fas fa-list"></i>
+      <span>All Detections (${detections.length}):</span>
+    </div>
+    <div class="summary-content">${summaryItems}</div>
+  `;
+
+  // Insert after image info
+  const imageInfo = card.querySelector(".image-info");
+  if (imageInfo) {
+    imageInfo.appendChild(summary);
+  }
 }
 
 // Note: drawBoundingBox function replaced with drawBoundingBoxOnCanvas for multiple images

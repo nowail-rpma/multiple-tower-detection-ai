@@ -10,8 +10,15 @@ ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
-# Install only curl for health checks (PyTorch image has everything else)
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# Install system dependencies including OpenGL libraries for OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
