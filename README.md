@@ -23,9 +23,23 @@ pip install -r requirements.txt
 ### 2. Add Your Trained Model
 
 1. Place your trained YOLOv11 model file in the project root
-2. Rename it to `tower_model.pt` or update the `MODEL_PATH` in `app.py`
+2. Keep it as `best.pt` (default) or set `MODEL_PATH` via environment/app config
 
-### 3. Run the Application
+### 3. Configure via Environment (optional)
+
+Create a `.env` file (or export env vars):
+
+```bash
+MODEL_PATH=/app/best.pt
+UPLOAD_FOLDER=uploads
+ALLOWED_EXTENSIONS=png,jpg,jpeg,gif,bmp,tiff
+MAX_FILE_SIZE=10485760
+PORT=5000
+# Optional API key for /api/* endpoints (send X-API-Key or Bearer token)
+# API_KEY=changeme
+```
+
+### 4. Run the Application
 
 ```bash
 python app.py
@@ -102,23 +116,23 @@ The model can detect **21 different classes** of towers, equipment, and damage i
 
 - **Control Box** (7) - Equipment control units
 - **Generator** (8) - Power generation equipment
-- **solar panel** (9) - Solar power panels
-- **GSM ANTENNA** (10) - GSM communication antennas
-- **MICROWAVE ANTENNA** (11) - Microwave communication antennas
-- **Microwave antenna** (14) - Alternative microwave antenna naming
-- **Panel antenna** (15) - Panel-type antennas
-- ** Dirty antenna** (16) - Antennas with dirt accumulation
+- **Solar Panel** (9) - Solar power panels
+- **GSM Antenna** (10) - GSM communication antennas
+- **Microwave Antenna** (11) - Microwave communication antennas
+- **Microwave Antenna** (14) - Alternative microwave antenna naming
+- **Panel Antenna** (15) - Panel-type antennas
+- **Dirty Antenna** (16) - Antennas with dirt accumulation
 
 ### Damage & Maintenance Issues
 
-- **discoloration** (3) - Surface discoloration
-- **surface-damage** (4) - Visible surface damage
+- **Discoloration** (3) - Surface discoloration
+- **Surface-Damage** (4) - Visible surface damage
 - **Nest** (12) - Bird or animal nests
 - **Corrosion** (13) - Corrosion damage
-- **Dirty equipment** (17) - Equipment with dirt accumulation
-- ** Rusty mounts and bolts** (18) - Rusty mounting hardware
-- ** Rusty bolts** (19) - Individual rusty bolts
-- **Rusty rod and bolts** (20) - Rusty structural elements
+- **Dirty Equipment** (17) - Equipment with dirt accumulation
+- **Rusty Mounts and Bolts** (18) - Rusty mounting hardware
+- **Rusty Bolts** (19) - Individual rusty bolts
+- **Rusty Rod and Bolts** (20) - Rusty structural elements
 
 ## Usage
 
@@ -168,11 +182,9 @@ MODEL_PATH = 'path/to/your/trained/model.pt'
 
 For production deployment:
 
-1. Set `debug=False` in `app.py`
-2. Use a production WSGI server like Gunicorn
-3. Configure proper file upload limits
-4. Set up proper error logging
-5. Use HTTPS for secure file uploads
+1. Use the included Dockerfile (runs Gunicorn) and optional Nginx proxy
+2. Configure env vars (`MODEL_PATH`, `API_KEY`, `PORT`, etc.)
+3. Set up proper error logging and HTTPS via reverse proxy
 
 ## License
 

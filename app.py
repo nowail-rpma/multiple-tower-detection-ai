@@ -14,18 +14,48 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-# Configuration
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+# Configuration (env-overridable)
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
+ALLOWED_EXTENSIONS = {
+    ext.strip().lower() for ext in os.environ.get(
+        'ALLOWED_EXTENSIONS', 'png,jpg,jpeg,gif,bmp,tiff'
+    ).split(',') if ext.strip()
+}
+try:
+    MAX_FILE_SIZE = int(os.environ.get('MAX_FILE_SIZE', str(10 * 1024 * 1024)))
+except ValueError:
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # fallback 10MB
+
+# Optional API key for simple auth (no-op if not set)
+API_KEY = os.environ.get('API_KEY')
 
 # Create upload directory
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Load YOLOv11 model (you'll need to replace this with your trained model path)
-# For now, using a placeholder - replace with your actual model path
-MODEL_PATH = 'best.pt'  # Replace with your trained model path
+# Load YOLOv11 model path
+MODEL_PATH = os.environ.get('MODEL_PATH', 'best.pt')
 model = None
+
+# Classes that must be excluded from recognition/output
+EXCLUDED_LABEL_KEY = 'antenna-damaged'
+
+def _normalize_label_key(name):
+    """Normalize label to a canonical lowercase key (spaces collapsed, hyphens unified)."""
+    try:
+        s = ' '.join(str(name).strip().lower().split())
+    except Exception:
+        return ''
+    # unify various dash variants and remove surrounding spaces
+    s = s.replace(' – ', '-').replace(' — ', '-')
+    s = s.replace(' - ', '-').replace(' –', '-').replace('– ', '-')
+    s = s.replace(' —', '-').replace('— ', '-')
+    s = s.replace('–', '-').replace('—', '-')
+    return s
+
+def is_excluded_class(name):
+    """Return True if the provided class name should be ignored entirely."""
+    key = _normalize_label_key(name)
+    return key == EXCLUDED_LABEL_KEY
 
 def load_model():
     """Load the YOLOv11 model from best.pt"""
@@ -57,20 +87,61 @@ def load_model():
             
         else:
             print(f"ERROR: Model file not found at {MODEL_PATH}")
-            print("Please ensure best.pt is in the project root directory")
+            print("Please ensure model file exists or set MODEL_PATH env var")
             model = None
             
     except Exception as e:
         print(f"Error loading model: {e}")
         import traceback
         traceback.print_exc()
-        print("Please check that best.pt is a valid YOLO model file")
+        print("Please check that the .pt file is a valid YOLO model file")
         model = None
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def is_image_mimetype(file_obj):
+    """Best-effort server-side MIME check for images."""
+    mimetype = getattr(file_obj, 'mimetype', '') or ''
+    return mimetype.startswith('image/')
+
+def normalize_class_name(name):
+    """Normalize class names for consistent presentation without changing model logic."""
+    if not isinstance(name, str):
+        return name
+    cleaned = ' '.join(name.split())  # collapse whitespace
+    # Title-case common types but keep known acronyms
+    normalized = cleaned.title()
+    normalized = normalized.replace('Gsm', 'GSM')
+    # Specific trims
+    replacements = {
+        'Microwave Antenna': 'Microwave Antenna',
+        'Panel Antenna': 'Panel Antenna',
+        'Dirty Antenna': 'Dirty Antenna',
+        'Dirty Equipment': 'Dirty Equipment',
+        'Rusty Mounts And Bolts': 'Rusty Mounts and Bolts',
+        'Rusty Bolts': 'Rusty Bolts',
+        'Rusty Rod And Bolts': 'Rusty Rod and Bolts',
+        'Solar Panel': 'Solar Panel',
+        'Mobile Tower': 'Mobile Tower',
+        'Small Tower': 'Small Tower',
+        'Tower Base': 'Tower Base',
+        'Bts': 'BTS',
+    }
+    return replacements.get(normalized, normalized)
+
+def maybe_require_api_key():
+    """Enforce API key if configured via env. No-op if API_KEY not set."""
+    if not API_KEY:
+        return None  # allow
+    provided = request.headers.get('X-API-Key') or request.headers.get('Authorization')
+    if provided and provided.startswith('Bearer '):
+        provided = provided.split(' ', 1)[1]
+    if provided != API_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
+    return None
 
 def preprocess_image(image_path):
     """Preprocess image for YOLO inference"""
@@ -129,6 +200,10 @@ def run_inference(image):
                     else:
                         class_name = 'object'
                     
+                    # Exclude specific class completely
+                    if is_excluded_class(class_name):
+                        continue
+
                     detections.append({
                         'bbox': [float(x), float(y), float(w), float(h)],
                         'confidence': float(confidence),
@@ -155,6 +230,10 @@ def filter_false_positives(detections):
         confidence = detection['confidence']
         bbox = detection['bbox']
         
+        # Exclude specific class completely
+        if is_excluded_class(class_name):
+            continue
+
         # Filter out very small detections (likely false positives)
         if bbox[2] < 15 or bbox[3] < 15:  # Width or height less than 15 pixels
             continue
@@ -189,6 +268,10 @@ def static_files(filename):
 def detect_tower():
     """API endpoint for tower detection - supports single image"""
     try:
+        # Optional API key enforcement
+        auth_resp = maybe_require_api_key()
+        if auth_resp is not None:
+            return auth_resp
         # Check if image file is present
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -200,7 +283,7 @@ def detect_tower():
             return jsonify({'error': 'No file selected'}), 400
         
         # Check file type
-        if not allowed_file(file.filename):
+        if not allowed_file(file.filename) or not is_image_mimetype(file):
             return jsonify({'error': 'Invalid file type. Please upload an image.'}), 400
         
         # Check file size
@@ -230,7 +313,12 @@ def detect_tower():
                 # Return ALL detections, not just the best one
                 response = {
                     'success': True,
-                    'detections': detections,
+                    'detections': [
+                        {
+                            **d,
+                            'class_name': normalize_class_name(d.get('class_name'))
+                        } for d in detections
+                    ],
                     'total_detections': len(detections),
                     'message': f'Found {len(detections)} object(s) in the image'
                 }
@@ -260,6 +348,10 @@ def detect_tower():
 def detect_towers_multiple():
     """API endpoint for multiple tower detection"""
     try:
+        # Optional API key enforcement
+        auth_resp = maybe_require_api_key()
+        if auth_resp is not None:
+            return auth_resp
         # Check if image files are present
         if 'images' not in request.files:
             return jsonify({'error': 'No image files provided'}), 400
@@ -322,7 +414,12 @@ def detect_towers_multiple():
                         'index': i,
                         'success': True,
                         'filename': file.filename,
-                        'detections': detections,
+                        'detections': [
+                            {
+                                **d,
+                                'class_name': normalize_class_name(d.get('class_name'))
+                            } for d in detections
+                        ],
                         'total_detections': len(detections),
                         'message': f'Found {len(detections)} object(s) in {file.filename}'
                     }
@@ -386,10 +483,11 @@ def health_check():
 def get_classes():
     """Get all available detection classes from the loaded model"""
     if model is not None and hasattr(model, 'names'):
+        visible = {k: normalize_class_name(v) for k, v in model.names.items() if not is_excluded_class(v)}
         return jsonify({
             'success': True,
-            'classes': model.names,
-            'total_classes': len(model.names),
+            'classes': visible,
+            'total_classes': len(visible),
             'model_loaded': True
         })
     else:
@@ -408,16 +506,17 @@ def get_model_info():
             'model_loaded': True,
             'model_path': MODEL_PATH,
             'model_type': str(type(model)),
-            'total_classes': len(model.names) if hasattr(model, 'names') else 0,
-            'classes': model.names if hasattr(model, 'names') else {},
+            'total_classes': (len([1 for v in model.names.values() if not is_excluded_class(v)]) if hasattr(model, 'names') else 0),
+            'classes': ({k: normalize_class_name(v) for k, v in model.names.items() if not is_excluded_class(v)} if hasattr(model, 'names') else {}),
             'timestamp': time.time()
         }
         
         # Add class categories if available
         if hasattr(model, 'names') and model.names:
-            antenna_classes = [name for name in model.names.values() if 'antenna' in name.lower()]
-            tower_classes = [name for name in model.names.values() if 'tower' in name.lower()]
-            damage_classes = [name for name in model.names.values() if any(word in name.lower() for word in ['damage', 'rust', 'corrosion', 'dirty'])]
+            normalized_values = [normalize_class_name(name) for name in model.names.values() if not is_excluded_class(name)]
+            antenna_classes = [name for name in normalized_values if 'antenna' in name.lower()]
+            tower_classes = [name for name in normalized_values if 'tower' in name.lower()]
+            damage_classes = [name for name in normalized_values if any(word in name.lower() for word in ['damage', 'rust', 'corrosion', 'dirty'])]
             
             model_info['class_categories'] = {
                 'antenna_classes': antenna_classes,
@@ -443,4 +542,5 @@ if __name__ == '__main__':
     load_model()
     print("Starting Flask server...")
     # Use 0.0.0.0 for Docker compatibility
-    app.run(debug=False, host='0.0.0.0', port=5002)
+    port = int(os.environ.get('PORT', '5002'))
+    app.run(debug=False, host='0.0.0.0', port=port)

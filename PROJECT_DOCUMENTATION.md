@@ -4,9 +4,9 @@
 
 **Tower Detection AI** is a comprehensive web application that uses YOLOv11 (You Only Look Once) deep learning model to detect and analyze mobile communication towers, their components, and maintenance issues from uploaded images. The system provides real-time detection with confidence scores, bounding box visualization, and detailed classification of 21 different tower-related objects.
 
-## What is best.pt?
+## Model file naming
 
-The `best.pt` file is a **PyTorch model checkpoint** that contains the trained YOLOv11 neural network weights and architecture. This file is the core of the AI system and contains:
+By default the application looks for `best.pt`. You can change this by setting the `MODEL_PATH` environment variable. The model file is a **PyTorch model checkpoint** that contains the trained YOLOv11 neural network weights and architecture. It contains:
 
 - **Neural Network Weights**: The learned parameters from training on thousands of tower images
 - **Model Architecture**: The structure of the YOLOv11 model optimized for tower detection
@@ -86,7 +86,7 @@ The system can detect **21 different classes**:
 
 #### GET /api/classes
 
-- **Purpose**: Retrieve all available detection classes
+- **Purpose**: Retrieve all available detection classes (normalized for readability)
 - **Output**: List of 21 detection classes with IDs
 
 ### Detection Process Flow
@@ -193,7 +193,7 @@ TowerUi/
 - **RESTful API**: Standard HTTP endpoints
 - **Error Handling**: Comprehensive error management
 - **File Validation**: Size and format checking
-- **Security**: Secure file handling and cleanup
+- **Security**: Secure file handling and cleanup; optional API key on `/api/*` when `API_KEY` is set
 - **Monitoring**: Health checks and status endpoints
 
 ## Business Value
